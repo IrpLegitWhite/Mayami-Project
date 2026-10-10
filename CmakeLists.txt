@@ -1,0 +1,140 @@
+cmake_minimum_required(VERSION 3.15)
+project(mayami LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# ============================================================
+# ПУТИ
+# ============================================================
+set(SRC_DIR      "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set(TP_DIR       "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
+set(IMGUI_DIR    "${TP_DIR}/imgui")
+set(TEXTEDIT_DIR "${TP_DIR}/ImGuiColorTextEdit")
+set(BIN_DIR      "${CMAKE_CURRENT_SOURCE_DIR}/bin")
+
+# ============================================================
+# ОБЩЕЕ ЯДРО
+# ============================================================
+set(CORE_SOURCES
+    "${SRC_DIR}/lexer/Lexer.cpp"
+    "${SRC_DIR}/parser/Parser.cpp"
+    "${SRC_DIR}/parser/AST.cpp"
+    "${SRC_DIR}/codegen/BytecodeGen.cpp"
+    "${SRC_DIR}/vm/VM.cpp"
+)
+
+# ============================================================
+# IMGUI
+# ============================================================
+set(IMGUI_SOURCES
+    "${IMGUI_DIR}/imgui.cpp"
+    "${IMGUI_DIR}/imgui_draw.cpp"
+    "${IMGUI_DIR}/imgui_tables.cpp"
+    "${IMGUI_DIR}/imgui_widgets.cpp"
+    "${IMGUI_DIR}/backends/imgui_impl_win32.cpp"
+    "${IMGUI_DIR}/backends/imgui_impl_dx11.cpp"
+    "${TEXTEDIT_DIR}/TextEditor.cpp"
+)
+
+# ============================================================
+# ОБЩИЕ НАСТРОЙКИ
+# ============================================================
+set(MAYAMI_DEFS
+    _CRT_SECURE_NO_WARNINGS
+    NOMINMAX
+    WIN32_LEAN_AND_MEAN
+)
+
+set(MAYAMI_LIBS
+    d3d11 dxgi dwmapi comctl32 msimg32
+)
+
+# ============================================================
+# 1) mayamivm.exe — VM (ОКОННОЕ приложение)
+# ============================================================
+add_executable(mayamivm
+    "${SRC_DIR}/main_vm.cpp"
+    "${SRC_DIR}/vm/VM.cpp"
+)
+
+target_include_directories(mayamivm PRIVATE
+    "${SRC_DIR}"
+)
+
+if(MSVC)
+    target_compile_options(mayamivm PRIVATE /W3 /utf-8)
+    target_compile_definitions(mayamivm PRIVATE ${MAYAMI_DEFS})
+    # ★ Оконное приложение, но точка входа main (не WinMain)
+    target_link_options(mayamivm PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+else()
+    target_compile_options(mayamivm PRIVATE -Wall -Wextra)
+endif()
+
+set_target_properties(mayamivm PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${BIN_DIR}"
+)
+
+# ============================================================
+# 2) mayamic.exe — компилятор (консольное приложение)
+# ============================================================
+add_executable(mayamic
+    "${SRC_DIR}/main_compiler.cpp"
+    ${CORE_SOURCES}
+)
+
+target_include_directories(mayamic PRIVATE
+    "${SRC_DIR}"
+)
+
+if(MSVC)
+    target_compile_options(mayamic PRIVATE /W3 /utf-8)
+    target_compile_definitions(mayamic PRIVATE ${MAYAMI_DEFS})
+else()
+    target_compile_options(mayamic PRIVATE -Wall -Wextra)
+endif()
+
+set_target_properties(mayamic PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${BIN_DIR}"
+)
+
+# ============================================================
+# 3) mayami.exe — IDE
+# ============================================================
+add_executable(mayami
+    "${SRC_DIR}/main.cpp"
+    "${SRC_DIR}/App.cpp"
+    "${SRC_DIR}/core/FileSystem.cpp"
+    ${CORE_SOURCES}
+    ${IMGUI_SOURCES}
+)
+
+target_include_directories(mayami PRIVATE
+    "${SRC_DIR}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${TP_DIR}"
+    "${IMGUI_DIR}"
+    "${IMGUI_DIR}/backends"
+    "${TEXTEDIT_DIR}"
+)
+
+if(MSVC)
+    target_compile_options(mayami PRIVATE /W3 /utf-8 /wd5220 /wd4239)
+    target_compile_definitions(mayami PRIVATE ${MAYAMI_DEFS})
+    target_link_options(mayami PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+else()
+    target_compile_options(mayami PRIVATE -Wall -Wextra)
+endif()
+
+if(WIN32)
+    target_link_libraries(mayami PRIVATE ${MAYAMI_LIBS})
+endif()
+
+set_target_properties(mayami PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${BIN_DIR}"
+)
