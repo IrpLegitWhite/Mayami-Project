@@ -14,6 +14,9 @@
 
 namespace mayami {
 
+    // ============================================================
+    // EditorTab — вкладка редактора
+    // ============================================================
     struct EditorTab {
         std::string title;
         std::string path;
@@ -22,8 +25,14 @@ namespace mayami {
         TextEditor editor;
     };
 
+    // ============================================================
+    // Theme
+    // ============================================================
     enum class Theme { Dark, Light };
 
+    // ============================================================
+    // App — IDE
+    // ============================================================
     class App {
     public:
         App();
@@ -32,11 +41,13 @@ namespace mayami {
         int run();
 
     private:
+        // ─── Init ───────────────────────────────────────────
         bool initWin32();
         bool initImGui();
         void mainLoop();
         void shutdown();
 
+        // ─── UI ─────────────────────────────────────────────
         void drawUI();
         void drawTitleBar();
         void drawMenuBar();
@@ -51,11 +62,28 @@ namespace mayami {
         void applyTheme();
         void applyFonts();
 
+        // ★ Темы
+        enum class ThemeId {
+            Dark = 0,
+            Midnight,
+            Nord,
+            Dracula,
+            Light,
+        };
+        ThemeId m_themeId = ThemeId::Dark;
+
+        void applyThemeById(ThemeId id);
+        const char* themeName(ThemeId id) const;
+
+        // ─── Actions ────────────────────────────────────────
         void newFile();
         void openFile();
         void openProject();
         void saveFile();
         void openFileInEditor(const std::string& path);
+
+        // ★ Централизованное закрытие вкладки
+        void closeTab(int index);
 
         void runCode();
         void buildExe();
@@ -70,32 +98,40 @@ namespace mayami {
         void clearBuildLog();
         void clearOutputLog();
 
+        // ─── State — окно ───────────────────────────────────
         HWND m_hwnd = nullptr;
         bool m_shutdownCalled = false;
 
+        // ─── State — layout ─────────────────────────────────
         float m_titleBarHeight = 34.0f;
         float m_menuBarHeight = 30.0f;
         float m_statusBarHeight = 24.0f;
         float m_sidePanelWidth = 260.0f;
 
+        // ─── State — тема ───────────────────────────────────
         Theme m_theme = Theme::Dark;
 
+        // ─── State — шрифты ─────────────────────────────────
         ImFont* m_fontText = nullptr;
         ImFont* m_fontMono = nullptr;
         ImFont* m_fontIcon = nullptr;
 
+        // ─── State — вкладки ────────────────────────────────
         std::vector<EditorTab> m_tabs;
         int m_activeTab = -1;
 
-        // ★ Дебаг
+        // ─── State — дебаг ──────────────────────────────────
         bool m_debugMode = false;
 
+        // ─── State — собранный .exe ─────────────────────────
         std::string m_lastBuiltExe;
 
+        // ─── State — проект ─────────────────────────────────
         std::string m_projectRoot;
         FileEntry   m_fileTreeRoot;
         std::string m_selectedPath;
 
+        // ─── State — логи ───────────────────────────────────
         std::vector<std::string> m_buildLog;
         std::vector<std::string> m_outputLog;
 
@@ -103,6 +139,7 @@ namespace mayami {
         bool m_autoScrollOutput = true;
         int  m_terminalTab = 0;
 
+        // ─── State — окна ───────────────────────────────────
         bool m_showTerminalWindow = false;
         bool m_showAbout = false;
         bool m_showNewFileDialog = false;

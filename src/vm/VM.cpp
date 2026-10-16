@@ -7,11 +7,17 @@
 #include <sstream>
 #include <algorithm>
 #include <vector>
+#include <chrono>
+#include <random>
 
 #include <windows.h>
 #include <windowsx.h>
 
 namespace mayami {
+
+    // ★ Глобальные для time_ms и random
+    static std::chrono::steady_clock::time_point g_startTime = std::chrono::steady_clock::now();
+    static std::mt19937_64 g_rng{ std::random_device{}() };
 
     // ============================================================
     // UTF-8 ↔ UTF-16
@@ -377,13 +383,11 @@ namespace mayami {
 
     void VM::error(const std::string& msg) {
         m_errors.push_back(msg);
-
         if (m_debug && m_debugOut) {
             m_debugOut("[VM][ERROR] " + msg);
         }
     }
 
-    // ★ НЕ БРОСАЕТ исключение — возвращает null
     VmValue VM::pop() {
         if (m_stack.empty()) {
             if (m_debug && m_debugOut) {
@@ -394,7 +398,7 @@ namespace mayami {
                 m_debugOut(ss.str());
             }
             error("Stack underflow (recovered)");
-            return VmValue();   // null
+            return VmValue();
         }
         VmValue v = m_stack.back();
         m_stack.pop_back();
@@ -636,7 +640,259 @@ namespace mayami {
             break;
         }
 
-                               // ★ UI
+                               // ★★★ ПРЕОБРАЗОВАНИЯ ТИПОВ ★★★
+        case NATIVE_INT: {
+            if (args.size() >= 1) {
+                const VmValue& a = args[0];
+                if (a.type == VmType::Int)   return VmValue(a.i);
+                if (a.type == VmType::Float) return VmValue((int64_t)a.f);
+                if (a.type == VmType::Bool)  return VmValue((int64_t)(a.b ? 1 : 0));
+                if (a.type == VmType::String || a.type == VmType::Char) {
+                    std::string s = a.s;
+                    size_t start = s.find_first_not_of(" \t\r\n");
+                    if (start == std::string::npos) return VmValue((int64_t)0);
+                    size_t end = s.find_last_not_of(" \t\r\n");
+                    s = s.substr(start, end - start + 1);
+                    try {
+                        if (s.find('.') != std::string::npos) {
+                            return VmValue((int64_t)std::stod(s));
+                        }
+                        return VmValue((int64_t)std::stoll(s));
+                    }
+                    catch (...) {
+                        return VmValue((int64_t)0);
+                    }
+                }
+                return VmValue((int64_t)0);
+            }
+            break;
+        }
+
+        case NATIVE_FLOAT: {
+            if (args.size() >= 1) {
+                const VmValue& a = args[0];
+                if (a.type == VmType::Float) return VmValue(a.f);
+                if (a.type == VmType::Int)   return VmValue((double)a.i);
+                if (a.type == VmType::Bool)  return VmValue((double)(a.b ? 1.0 : 0.0));
+                if (a.type == VmType::String || a.type == VmType::Char) {
+                    std::string s = a.s;
+                    size_t start = s.find_first_not_of(" \t\r\n");
+                    if (start == std::string::npos) return VmValue(0.0);
+                    size_t end = s.find_last_not_of(" \t\r\n");
+                    s = s.substr(start, end - start + 1);
+                    try {
+                        return VmValue(std::stod(s));
+                    }
+                    catch (...) {
+                        return VmValue(0.0);
+                    }
+                }
+                return VmValue(0.0);
+            }
+            break;
+        }
+
+        case NATIVE_STR: {
+            if (args.size() >= 1) {
+                VmValue r;
+                r.type = VmType::String;
+                r.s = args[0].toString();
+                return r;
+            }
+            break;
+        }
+
+        case NATIVE_BOOL: {
+            if (args.size() >= 1) {
+                const VmValue& a = args[0];
+                bool result = false;
+                switch (a.type) {
+                case VmType::Null:   result = false; break;
+                case VmType::Int:    result = (a.i != 0); break;
+                case VmType::Float:  result = (a.f != 0.0); break;
+                case VmType::Bool:   result = a.b; break;
+                case VmType::String: result = !a.s.empty(); break;
+                case VmType::Char:   result = !a.s.empty(); break;
+                default:             result = true; break;
+                }
+                return VmValue(result);
+            }
+            break;
+        }
+
+        case NATIVE_CHAR: {
+            if (args.size() >= 1) {
+                int64_t code = (int64_t)args[0].toNumber();
+                if (code < 0 || code > 0x10FFFF) code = '?';
+                VmValue r;
+                r.type = VmType::Char;
+                if (code < 0x80) {
+                    r.s = std::string(1, (char)code);
+                }
+                else if (code < 0x800) {
+                    r.s += (char)(0xC0 | (code >> 6));
+                    r.s += (char)(0x80 | (code & 0x3F));
+                }
+                else if (code < 0x10000) {
+                    r.s += (char)(0xE0 | (code >> 12));
+                    r.s += (char)(0x80 | ((code >> 6) & 0x3F));
+                    r.s += (char)(0x80 | (code & 0x3F));
+                }
+                else {
+                    r.s += (char)(0xF0 | (code >> 18));
+                    r.s += (char)(0x80 | ((code >> 12) & 0x3F));
+                    r.s += (char)(0x80 | ((code >> 6) & 0x3F));
+                    r.s += (char)(0x80 | (code & 0x3F));
+                }
+                return r;
+            }
+            break;
+        }
+
+        case NATIVE_ORD: {
+            if (args.size() >= 1) {
+                const std::string& s = args[0].s;
+                if (s.empty()) return VmValue((int64_t)0);
+                unsigned char c = (unsigned char)s[0];
+                int64_t code = 0;
+                if (c < 0x80) {
+                    code = c;
+                }
+                else if ((c & 0xE0) == 0xC0 && s.size() >= 2) {
+                    code = ((c & 0x1F) << 6) | ((unsigned char)s[1] & 0x3F);
+                }
+                else if ((c & 0xF0) == 0xE0 && s.size() >= 3) {
+                    code = ((c & 0x0F) << 12) | (((unsigned char)s[1] & 0x3F) << 6) | ((unsigned char)s[2] & 0x3F);
+                }
+                else if ((c & 0xF8) == 0xF0 && s.size() >= 4) {
+                    code = ((c & 0x07) << 18) | (((unsigned char)s[1] & 0x3F) << 12) |
+                        (((unsigned char)s[2] & 0x3F) << 6) | ((unsigned char)s[3] & 0x3F);
+                }
+                else {
+                    code = c;
+                }
+                return VmValue(code);
+            }
+            break;
+        }
+
+                       // ★★★ МАТЕМАТИКА (дополнительно) ★★★
+        case NATIVE_RANDOM: {
+            std::uniform_real_distribution<double> dist(0.0, 1.0);
+            return VmValue(dist(g_rng));
+        }
+
+        case NATIVE_RANDOM_INT: {
+            if (args.size() >= 2) {
+                int64_t a = (int64_t)args[0].toNumber();
+                int64_t b = (int64_t)args[1].toNumber();
+                if (a > b) std::swap(a, b);
+                std::uniform_int_distribution<int64_t> dist(a, b);
+                return VmValue(dist(g_rng));
+            }
+            break;
+        }
+
+        case NATIVE_LOG:
+            if (args.size() == 1) return VmValue((double)std::log(args[0].toNumber()));
+            break;
+
+        case NATIVE_EXP:
+            if (args.size() == 1) return VmValue((double)std::exp(args[0].toNumber()));
+            break;
+
+        case NATIVE_ATAN2:
+            if (args.size() == 2) return VmValue((double)std::atan2(args[0].toNumber(), args[1].toNumber()));
+            break;
+
+            // ★★★ СТРОКИ (глобальные) ★★★
+        case NATIVE_STR_AT: {
+            if (args.size() >= 2) {
+                const std::string& s = args[0].s;
+                int64_t idx = (int64_t)args[1].toNumber();
+                if (idx < 0 || idx >= (int64_t)s.size()) {
+                    VmValue r; r.type = VmType::Char; r.s = ""; return r;
+                }
+                VmValue r;
+                r.type = VmType::Char;
+                r.s = std::string(1, s[(size_t)idx]);
+                return r;
+            }
+            break;
+        }
+
+        case NATIVE_TRIM: {
+            if (args.size() >= 1) {
+                std::string s = args[0].s;
+                size_t start = s.find_first_not_of(" \t\r\n");
+                size_t end = s.find_last_not_of(" \t\r\n");
+                VmValue r; r.type = VmType::String;
+                if (start == std::string::npos) r.s = "";
+                else r.s = s.substr(start, end - start + 1);
+                return r;
+            }
+            break;
+        }
+
+        case NATIVE_SPLIT_JOIN: {
+            if (args.size() >= 2) {
+                const std::string& s = args[0].s;
+                const std::string& delim = args[1].s;
+                if (delim.empty()) {
+                    VmValue r; r.type = VmType::String; r.s = s; return r;
+                }
+                std::string result;
+                size_t pos = 0;
+                size_t found;
+                bool first = true;
+                while ((found = s.find(delim, pos)) != std::string::npos) {
+                    if (!first) result += "|";
+                    result += s.substr(pos, found - pos);
+                    pos = found + delim.size();
+                    first = false;
+                }
+                if (!first) result += "|";
+                result += s.substr(pos);
+                VmValue r; r.type = VmType::String; r.s = result; return r;
+            }
+            break;
+        }
+
+        case NATIVE_TO_UPPER: {
+            if (args.size() >= 1) {
+                std::string r = args[0].s;
+                for (auto& c : r) c = (char)std::toupper((unsigned char)c);
+                VmValue v; v.type = VmType::String; v.s = r; return v;
+            }
+            break;
+        }
+
+        case NATIVE_TO_LOWER: {
+            if (args.size() >= 1) {
+                std::string r = args[0].s;
+                for (auto& c : r) c = (char)std::tolower((unsigned char)c);
+                VmValue v; v.type = VmType::String; v.s = r; return v;
+            }
+            break;
+        }
+
+                            // ★★★ ВРЕМЯ ★★★
+        case NATIVE_TIME_MS: {
+            auto now = std::chrono::steady_clock::now();
+            auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - g_startTime).count();
+            return VmValue((int64_t)ms);
+        }
+
+        case NATIVE_SLEEP_MS: {
+            int ms = 16;
+            if (args.size() >= 1) ms = (int)args[0].toNumber();
+            if (ms < 0) ms = 0;
+            if (ms > 60000) ms = 60000;
+            Sleep(ms);
+            return VmValue();
+        }
+
+                            // ★ UI
         case NATIVE_UI_BEGIN: {
             if (args.size() >= 3) {
                 resetUi();
@@ -799,11 +1055,9 @@ namespace mayami {
             pumpMessages();
             std::string cid = g_ui.clickedId;
             g_ui.clickedId.clear();
-
             if (m_debug && m_debugOut && !cid.empty()) {
                 m_debugOut("[VM]   <- UI_POLL returned: " + cid);
             }
-
             VmValue r;
             r.type = VmType::String;
             r.s = cid;
@@ -865,7 +1119,6 @@ namespace mayami {
     bool VM::executeOne() {
         if (m_ip >= m_code.size()) return false;
 
-        // Защита от утечек
         if (m_stack.size() > 100000) { error("Stack overflow"); return false; }
         if (m_vars.size() > 100000) { error("Vars overflow");  return false; }
         if (m_frames.size() > 10000) { error("Frames overflow");return false; }
@@ -896,31 +1149,15 @@ namespace mayami {
         case OpCode::PUSH_TRUE:  push(VmValue(true)); break;
         case OpCode::PUSH_FALSE: push(VmValue(false)); break;
 
-        case OpCode::PUSH_INT: {
-            int64_t v = readI64();
-            push(VmValue(v));
-            break;
-        }
-        case OpCode::PUSH_FLOAT: {
-            double v = readF64();
-            push(VmValue(v));
-            break;
-        }
+        case OpCode::PUSH_INT: { int64_t v = readI64(); push(VmValue(v)); break; }
+        case OpCode::PUSH_FLOAT: { double v = readF64(); push(VmValue(v)); break; }
         case OpCode::PUSH_STR: {
             std::string s = readString();
-            VmValue v;
-            v.type = VmType::String;
-            v.s = s;
-            push(v);
-            break;
+            VmValue v; v.type = VmType::String; v.s = s; push(v); break;
         }
         case OpCode::PUSH_CHAR: {
             char c = (char)readByte();
-            VmValue v;
-            v.type = VmType::Char;
-            v.s = std::string(1, c);
-            push(v);
-            break;
+            VmValue v; v.type = VmType::Char; v.s = std::string(1, c); push(v); break;
         }
 
         case OpCode::POP:
@@ -936,13 +1173,10 @@ namespace mayami {
                 std::swap(m_stack[m_stack.size() - 1], m_stack[m_stack.size() - 2]);
             break;
 
-            // ★ LOAD/STORE — защищённые
         case OpCode::LOAD_VAR: {
             uint32_t slot = readU32();
             uint32_t base = m_frames.empty() ? 0 : m_frames.back().varBase;
-
             if (slot > 100000) { push(VmValue()); break; }
-
             uint32_t real = base + slot;
             if (real >= m_vars.size()) push(VmValue());
             else push(m_vars[real]);
@@ -952,12 +1186,9 @@ namespace mayami {
         case OpCode::STORE_VAR: {
             uint32_t slot = readU32();
             uint32_t base = m_frames.empty() ? 0 : m_frames.back().varBase;
-
             if (slot > 100000) { pop(); break; }
-
             VmValue v = pop();
             uint32_t real = base + slot;
-
             if (real >= m_vars.size()) {
                 if (real + 1 > 100000) break;
                 m_vars.resize(real + 1);
@@ -1005,11 +1236,7 @@ namespace mayami {
         }
         case OpCode::DIV: {
             VmValue b = pop(); VmValue a = pop();
-            if (b.toNumber() == 0.0) {
-                error("Division by zero");
-                push(VmValue());
-                break;
-            }
+            if (b.toNumber() == 0.0) { error("Division by zero"); push(VmValue()); break; }
             if (a.type == VmType::Int && b.type == VmType::Int)
                 push(VmValue((int64_t)(a.i / b.i)));
             else push(VmValue((double)(a.toNumber() / b.toNumber())));
@@ -1017,11 +1244,7 @@ namespace mayami {
         }
         case OpCode::MOD: {
             VmValue b = pop(); VmValue a = pop();
-            if (b.i == 0) {
-                error("Modulo by zero");
-                push(VmValue());
-                break;
-            }
+            if (b.i == 0) { error("Modulo by zero"); push(VmValue()); break; }
             push(VmValue((int64_t)(a.i % b.i)));
             break;
         }
@@ -1070,23 +1293,16 @@ namespace mayami {
             break;
         }
 
-                                 // ★ CALL — защищённый от недостатка стека
         case OpCode::CALL: {
             uint32_t funcIdx = readU32();
             uint8_t argc = readByte();
-
             if (funcIdx >= m_functions.size()) {
                 error("CALL: invalid funcIdx " + std::to_string(funcIdx));
                 return false;
             }
-
             const BytecodeFunction& fn = m_functions[funcIdx];
-
-            // Собираем аргументы (если стек пуст — null)
             std::vector<VmValue> args(argc);
-            for (int k = argc - 1; k >= 0; --k) {
-                args[k] = pop();   // pop вернёт null если пусто
-            }
+            for (int k = argc - 1; k >= 0; --k) args[k] = pop();
 
             Frame frame;
             frame.returnIP = (uint32_t)m_ip;
@@ -1095,7 +1311,6 @@ namespace mayami {
             m_frames.push_back(frame);
 
             m_vars.resize(frame.varBase + fn.localCount);
-
             for (uint32_t k = 0; k < argc && k < fn.localCount; ++k) {
                 m_vars[frame.varBase + k] = args[k];
             }
@@ -1108,22 +1323,13 @@ namespace mayami {
             break;
         }
 
-                         // ★ RET — защищённый
         case OpCode::RET: {
             VmValue ret;
             if (!m_stack.empty()) ret = pop();
-
-            if (m_frames.empty()) {
-                // RET из root — это как выход
-                push(ret);
-                return false;
-            }
-
+            if (m_frames.empty()) { push(ret); return false; }
             Frame frame = m_frames.back();
             m_frames.pop_back();
-
             if (m_vars.size() > frame.varBase) m_vars.resize(frame.varBase);
-
             if (frame.returnIP > m_code.size()) {
                 error("RET: invalid returnIP");
                 return false;
@@ -1136,13 +1342,9 @@ namespace mayami {
         case OpCode::CALL_NATIVE: {
             uint32_t id = readU32();
             uint8_t argc = readByte();
-
             std::vector<VmValue> args;
             args.resize(argc);
-            for (int k = argc - 1; k >= 0; --k) {
-                args[k] = pop();   // pop безопасный
-            }
-
+            for (int k = argc - 1; k >= 0; --k) args[k] = pop();
             VmValue result = callNative(id, args);
             push(result);
             break;
@@ -1158,25 +1360,17 @@ namespace mayami {
             break;
         }
         case OpCode::ARRAY_GET: {
-            VmValue idx = pop();
-            VmValue arr = pop();
-            if (arr.type != VmType::Array || !arr.array) {
-                push(VmValue());
-                break;
-            }
+            VmValue idx = pop(); VmValue arr = pop();
+            if (arr.type != VmType::Array || !arr.array) { push(VmValue()); break; }
             long long i = idx.i;
             if (i < 0 || i >= (long long)arr.array->size()) {
-                error("Array index OOB");
-                push(VmValue());
-                break;
+                error("Array index OOB"); push(VmValue()); break;
             }
             push((*arr.array)[(size_t)i]);
             break;
         }
         case OpCode::ARRAY_SET: {
-            VmValue val = pop();
-            VmValue idx = pop();
-            VmValue arr = pop();
+            VmValue val = pop(); VmValue idx = pop(); VmValue arr = pop();
             if (arr.type != VmType::Array || !arr.array) break;
             long long i = idx.i;
             if (i < 0 || i >= (long long)arr.array->size()) break;
@@ -1211,8 +1405,7 @@ namespace mayami {
         }
         case OpCode::FIELD_SET: {
             uint32_t fid = readU32();
-            VmValue val = pop();
-            VmValue obj = pop();
+            VmValue val = pop(); VmValue obj = pop();
             if (obj.type == VmType::Struct && obj.fields)
                 (*obj.fields)[fid] = val;
             push(obj);
@@ -1264,8 +1457,7 @@ namespace mayami {
             }
             catch (const std::exception& e) {
                 std::ostringstream ss;
-                ss << "STD_EXCEPTION at ip=" << m_ip
-                    << " (" << e.what() << ")";
+                ss << "STD_EXCEPTION at ip=" << m_ip << " (" << e.what() << ")";
                 error(ss.str());
                 break;
             }

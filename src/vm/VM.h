@@ -49,7 +49,7 @@ namespace mayami {
 
         void setOutputCallback(VmOutputCallback cb) { m_output = std::move(cb); }
 
-        // ★ Отладка
+        // Отладка
         void setDebug(bool on) { m_debug = on; }
         void setDebugCallback(std::function<void(const std::string&)> cb) {
             m_debugOut = std::move(cb);
@@ -98,7 +98,7 @@ namespace mayami {
         VmOutputCallback m_output;
         std::vector<std::string> m_errors;
 
-        // ★ Отладка
+        // Отладка
         bool m_debug = false;
         std::function<void(const std::string&)> m_debugOut;
         size_t m_stepCount = 0;

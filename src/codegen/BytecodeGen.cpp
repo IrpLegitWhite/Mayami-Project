@@ -474,6 +474,9 @@ namespace mayami {
         }
     }
 
+    // ============================================================
+    // ВЫЗОВ ФУНКЦИЙ — главная таблица native
+    // ============================================================
     void BytecodeGen::genCall(CallExpr* e) {
         // obj.method(...)
         if (e->callee->kind == ExprKind::Field) {
@@ -536,7 +539,7 @@ namespace mayami {
         }
 
         static const std::unordered_map<std::string, uint32_t> nativeIds = {
-            // Вывод
+            // ─── Вывод ──────────────────────────────────────
             { "p",         NATIVE_PRINTLN },
             { "println",   NATIVE_PRINTLN },
             { "w",         NATIVE_PRINT },
@@ -544,7 +547,7 @@ namespace mayami {
             { "e",         NATIVE_EPRINT },
             { "eprint",    NATIVE_EPRINT },
 
-            // Математика
+            // ─── Математика ─────────────────────────────────
             { "s",     NATIVE_SQRT },
             { "sqrt",  NATIVE_SQRT },
             { "a",     NATIVE_ABS },
@@ -568,7 +571,7 @@ namespace mayami {
             { "mx",    NATIVE_MAX },
             { "max",   NATIVE_MAX },
 
-            // Старый UI (WinAPI-контролы)
+            // ─── UI (старые WinAPI) ─────────────────────────
             { "ui_begin",     NATIVE_UI_BEGIN },
             { "ui_label",     NATIVE_UI_LABEL },
             { "ui_button",    NATIVE_UI_BUTTON },
@@ -579,7 +582,7 @@ namespace mayami {
             { "ui_get",       NATIVE_UI_GETVAL },
             { "ui_textbox",   NATIVE_UI_TEXTBOX },
 
-            // Event loop
+            // ─── Event loop ─────────────────────────────────
             { "ui_running",   NATIVE_UI_RUNNING },
             { "ui_poll",      NATIVE_UI_POLL },
             { "ui_sleep",     NATIVE_UI_SLEEP },
@@ -588,7 +591,7 @@ namespace mayami {
             { "ui_remove",    NATIVE_UI_REMOVE },
             { "ui_refresh",   NATIVE_UI_REFRESH },
 
-            // ★ Кастомный UI
+            // ─── Кастомный UI ───────────────────────────────
             { "ui_theme",      NATIVE_UI_THEME },
             { "ui_rect",       NATIVE_UI_RECT },
             { "ui_rect_round", NATIVE_UI_RECT_ROUND },
@@ -600,6 +603,37 @@ namespace mayami {
             { "ui_height",     NATIVE_UI_HEIGHT },
             { "ui_mouse_x",    NATIVE_UI_MOUSE_X },
             { "ui_mouse_y",    NATIVE_UI_MOUSE_Y },
+
+            // ─── ★ Преобразования типов (псевдонимы!) ──────
+            { "to_int",     NATIVE_INT },
+            { "to_float",   NATIVE_FLOAT },
+            { "to_str",     NATIVE_STR },
+            { "to_bool",    NATIVE_BOOL },
+            { "chr",        NATIVE_CHAR },
+            { "ord",        NATIVE_ORD },
+
+            // ─── ★ Математика (дополнительно) ───────────────
+            { "random",     NATIVE_RANDOM },
+            { "rnd",        NATIVE_RANDOM },
+            { "random_int", NATIVE_RANDOM_INT },
+            { "randint",    NATIVE_RANDOM_INT },
+            { "log",        NATIVE_LOG },
+            { "ln",         NATIVE_LOG },
+            { "exp",        NATIVE_EXP },
+            { "atan2",      NATIVE_ATAN2 },
+
+            // ─── ★ Строки (глобальные) ──────────────────────
+            { "str_at",    NATIVE_STR_AT },
+            { "trim",      NATIVE_TRIM },
+            { "split",     NATIVE_SPLIT_JOIN },
+            { "to_upper",  NATIVE_TO_UPPER },
+            { "to_lower",  NATIVE_TO_LOWER },
+
+            // ─── ★ Время ────────────────────────────────────
+            { "time_ms",   NATIVE_TIME_MS },
+            { "time",      NATIVE_TIME_MS },
+            { "sleep_ms",  NATIVE_SLEEP_MS },
+            { "sleep",     NATIVE_SLEEP_MS },
         };
 
         auto it = nativeIds.find(id->name);

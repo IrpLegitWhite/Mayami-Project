@@ -11,6 +11,9 @@ namespace mayami {
     constexpr uint32_t BYTECODE_MAGIC = 0x4D594D49;
     constexpr uint16_t BYTECODE_VERSION = 1;
 
+    // ============================================================
+    // Опкоды
+    // ============================================================
     enum class OpCode : uint8_t {
         NOP = 0x00,
         PUSH_NULL = 0x01,
@@ -80,11 +83,16 @@ namespace mayami {
         HALT = 0xFF,
     };
 
+    // ============================================================
+    // Native ID
+    // ============================================================
     enum NativeId : uint32_t {
+        // Вывод
         NATIVE_PRINTLN = 1,
         NATIVE_PRINT = 2,
         NATIVE_EPRINT = 3,
 
+        // Математика (базовая)
         NATIVE_SQRT = 10,
         NATIVE_ABS = 11,
         NATIVE_SIN = 12,
@@ -97,6 +105,7 @@ namespace mayami {
         NATIVE_MIN = 19,
         NATIVE_MAX = 20,
 
+        // Строки (методы)
         NATIVE_STR_LEN = 30,
         NATIVE_STR_UPPER = 31,
         NATIVE_STR_LOWER = 32,
@@ -105,6 +114,7 @@ namespace mayami {
         NATIVE_STR_CONTAINS = 35,
         NATIVE_STR_REPLACE = 36,
 
+        // UI (старые WinAPI)
         NATIVE_UI_BEGIN = 100,
         NATIVE_UI_LABEL = 101,
         NATIVE_UI_BUTTON = 102,
@@ -115,6 +125,7 @@ namespace mayami {
         NATIVE_UI_GETVAL = 107,
         NATIVE_UI_TEXTBOX = 108,
 
+        // Event loop
         NATIVE_UI_RUNNING = 109,
         NATIVE_UI_POLL = 110,
         NATIVE_UI_SLEEP = 111,
@@ -123,6 +134,7 @@ namespace mayami {
         NATIVE_UI_REMOVE = 114,
         NATIVE_UI_REFRESH = 115,
 
+        // Кастомный UI
         NATIVE_UI_THEME = 120,
         NATIVE_UI_RECT = 121,
         NATIVE_UI_RECT_ROUND = 122,
@@ -134,8 +146,37 @@ namespace mayami {
         NATIVE_UI_HEIGHT = 128,
         NATIVE_UI_MOUSE_X = 129,
         NATIVE_UI_MOUSE_Y = 130,
+
+        // ★ Преобразования типов
+        NATIVE_INT = 200,
+        NATIVE_FLOAT = 201,
+        NATIVE_STR = 202,
+        NATIVE_BOOL = 203,
+        NATIVE_CHAR = 204,
+        NATIVE_ORD = 205,
+
+        // ★ Математика (дополнительно)
+        NATIVE_RANDOM = 210,
+        NATIVE_RANDOM_INT = 211,
+        NATIVE_LOG = 212,
+        NATIVE_EXP = 213,
+        NATIVE_ATAN2 = 214,
+
+        // ★ Строки (глобальные)
+        NATIVE_STR_AT = 220,
+        NATIVE_TRIM = 221,
+        NATIVE_SPLIT_JOIN = 222,
+        NATIVE_TO_UPPER = 223,
+        NATIVE_TO_LOWER = 224,
+
+        // ★ Время
+        NATIVE_TIME_MS = 230,
+        NATIVE_SLEEP_MS = 231,
     };
 
+    // ============================================================
+    // Тип значения
+    // ============================================================
     enum class VmType : uint8_t {
         Null = 0,
         Int = 1,
@@ -147,6 +188,9 @@ namespace mayami {
         Struct = 7,
     };
 
+    // ============================================================
+    // Заголовок .myc
+    // ============================================================
 #pragma pack(push, 1)
     struct BytecodeHeader {
         uint32_t magic;
@@ -177,6 +221,9 @@ namespace mayami {
     };
 #pragma pack(pop)
 
+    // ============================================================
+    // Запись (little-endian)
+    // ============================================================
     inline void writeU16(std::vector<uint8_t>& v, uint16_t x) {
         v.push_back((uint8_t)(x & 0xFF));
         v.push_back((uint8_t)((x >> 8) & 0xFF));
@@ -204,6 +251,9 @@ namespace mayami {
         v.insert(v.end(), s.begin(), s.end());
     }
 
+    // ============================================================
+    // Чтение
+    // ============================================================
     inline uint16_t readU16(const uint8_t* p) {
         return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
     }

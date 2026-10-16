@@ -262,11 +262,33 @@ void TextEditor::renderCurrentLineHighlight() {
 
 			if (inserted) {
 				const auto& line = document[lineNumber];
-				const auto topLeft = ImVec2(textLeftOffset, cursorScreenPos.y + line.row * glyphSize.y);
-				const auto bottomRight = topLeft + ImVec2(textRightOffset, line.rows * glyphSize.y);
 
-				drawList->AddRectFilled(topLeft, bottomRight, palette.get(Color::currentLineHighlight));
-				drawList->AddRect(topLeft, bottomRight, palette.get(Color::currentLineHighlightBorder));
+				// ★ Отступы и радиус для скруглённой подсветки
+				const float padX = 2.0f;      // по горизонтали
+				const float padY = 1.0f;      // сверху/снизу
+				const float rounding = 6.0f;  // радиус скругления
+
+				const auto topLeft = ImVec2(
+					textLeftOffset - padX,
+					cursorScreenPos.y + line.row * glyphSize.y + padY);
+				const auto bottomRight = topLeft + ImVec2(
+					textRightOffset + padX * 2.0f,
+					line.rows * glyphSize.y - padY * 2.0f);
+
+				ImU32 fill = palette.get(Color::currentLineHighlight);
+				ImU32 edge = palette.get(Color::currentLineHighlightBorder);
+
+				// ★ Скруглённый фон
+				drawList->AddRectFilled(topLeft, bottomRight, fill, rounding);
+
+				// ★ Левая акцентная полоска (только если border не прозрачный)
+				if ((edge & IM_COL32_A_MASK) != 0) {
+					drawList->AddRectFilled(
+						ImVec2(topLeft.x, topLeft.y + 2.0f),
+						ImVec2(topLeft.x + 2.5f, bottomRight.y - 2.0f),
+						edge,
+						1.25f);
+				}
 			}
 		}
 	}
