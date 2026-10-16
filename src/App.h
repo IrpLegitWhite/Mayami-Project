@@ -59,12 +59,15 @@ namespace mayami {
         void drawNewFileDialog();
         void drawNewFolderDialog();
 
+        // ★ Welcome screen (когда нет открытой папки)
+        void drawWelcomeScreen();
+
         void applyTheme();
         void applyFonts();
 
-        // ★ Темы
+        // ─── Темы ───────────────────────────────────────────
         enum class ThemeId {
-            Dark = 0,
+            Dark = 0,      // macOS Light по умолчанию
             Midnight,
             Nord,
             Dracula,
@@ -89,6 +92,11 @@ namespace mayami {
         void buildExe();
         void runExe();
 
+        // ─── Session ────────────────────────────────────────
+        void saveSession();
+        void loadSession();
+        std::string getSessionPath() const;
+
         void log(const std::string& msg);
         void logError(const std::string& msg);
         void logSuccess(const std::string& msg);
@@ -103,13 +111,13 @@ namespace mayami {
         bool m_shutdownCalled = false;
 
         // ─── State — layout ─────────────────────────────────
-        float m_titleBarHeight = 34.0f;
+        float m_titleBarHeight = 28.0f;
         float m_menuBarHeight = 30.0f;
         float m_statusBarHeight = 24.0f;
         float m_sidePanelWidth = 260.0f;
 
         // ─── State — тема ───────────────────────────────────
-        Theme m_theme = Theme::Dark;
+        Theme m_theme = Theme::Light;
 
         // ─── State — шрифты ─────────────────────────────────
         ImFont* m_fontText = nullptr;
@@ -147,6 +155,12 @@ namespace mayami {
 
         char m_newFileName[256] = {};
         char m_newFolderName[256] = {};
+
+        // ─── Session ────────────────────────────────────────
+        bool m_restoreSession = true;
+
+        // ─── Welcome ────────────────────────────────────────
+        bool m_showWelcomeScreen = false;
     };
 
 } // namespace mayami

@@ -31,20 +31,19 @@ namespace mayami {
         Bool,
         String,
         Char,
-        // Пользовательские типы
-        Named,      // "Point", "MyStruct"
-        Array,      // [T; N]
-        Slice,      // [T]
-        Ref,        // &T
-        MutRef,     // &mut T
-        Ptr,        // *T
+        Named,
+        Array,
+        Slice,
+        Ref,
+        MutRef,
+        Ptr,
     };
 
     struct Type {
         TypeKind kind = TypeKind::Unknown;
-        std::string name;           // для Named
-        std::shared_ptr<Type> inner; // для Ref, Array, Slice
-        size_t arraySize = 0;       // для Array
+        std::string name;
+        std::shared_ptr<Type> inner;
+        size_t arraySize = 0;
 
         std::string toString() const;
     };
@@ -52,53 +51,22 @@ namespace mayami {
     using TypePtr = std::shared_ptr<Type>;
 
     // ============================================================
-    // Expr — выражения
+    // Expr
     // ============================================================
     enum class ExprKind {
-        // Литералы
-        IntLit,
-        FloatLit,
-        StringLit,
-        CharLit,
-        BoolLit,
-
-        // Идентификатор
+        IntLit, FloatLit, StringLit, CharLit, BoolLit,
         Identifier,
-
-        // Унарные
-        Unary,      // -x, !x, ~x
-
-        // Бинарные
-        Binary,     // a + b, a == b, ...
-
-        // Присваивание
-        Assign,     // x = 5
-
-        // Вызов функции
-        Call,       // foo(a, b)
-
-        // Обращение к полю
-        Field,      // obj.field
-
-        // Индексация
-        Index,      // arr[i]
-
-        // Группа
-        Group,      // (expr)
-
-        // Блок как выражение
-        Block,      // { stmt; ...; expr }
-
-        // If как выражение
+        Unary,
+        Binary,
+        Assign,
+        Call,
+        Field,
+        Index,
+        Group,
+        Block,
         IfExpr,
-
-        // Массив
-        ArrayLit,   // [1, 2, 3]
-
-        // Структура
-        StructLit,  // Point { x: 1, y: 2 }
-
-        // Path (foo::bar::baz)
+        ArrayLit,
+        StructLit,
         Path,
     };
 
@@ -106,7 +74,7 @@ namespace mayami {
         ExprKind kind;
         int line = 0;
         int column = 0;
-        TypePtr type;   // заполняется в sema
+        TypePtr type;
 
         Expr(ExprKind k) : kind(k) {}
         virtual ~Expr() = default;
@@ -114,75 +82,65 @@ namespace mayami {
         virtual std::string toString(int indent = 0) const = 0;
     };
 
-    // ─── IntLit ─────────────────────────────────────────────
     struct IntLitExpr : Expr {
         long long value;
         IntLitExpr() : Expr(ExprKind::IntLit) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── FloatLit ───────────────────────────────────────────
     struct FloatLitExpr : Expr {
         double value;
         FloatLitExpr() : Expr(ExprKind::FloatLit) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── StringLit ──────────────────────────────────────────
     struct StringLitExpr : Expr {
         std::string value;
         StringLitExpr() : Expr(ExprKind::StringLit) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── CharLit ────────────────────────────────────────────
     struct CharLitExpr : Expr {
         char value;
         CharLitExpr() : Expr(ExprKind::CharLit) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── BoolLit ────────────────────────────────────────────
     struct BoolLitExpr : Expr {
         bool value;
         BoolLitExpr() : Expr(ExprKind::BoolLit) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Identifier ─────────────────────────────────────────
     struct IdentifierExpr : Expr {
         std::string name;
         IdentifierExpr() : Expr(ExprKind::Identifier) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Unary ──────────────────────────────────────────────
     struct UnaryExpr : Expr {
-        std::string op;     // "-", "!", "~"
+        std::string op;
         ExprPtr operand;
         UnaryExpr() : Expr(ExprKind::Unary) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Binary ─────────────────────────────────────────────
     struct BinaryExpr : Expr {
-        std::string op;     // "+", "-", "*", "/", "%", "==", "!=", ...
+        std::string op;
         ExprPtr left;
         ExprPtr right;
         BinaryExpr() : Expr(ExprKind::Binary) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Assign ─────────────────────────────────────────────
     struct AssignExpr : Expr {
-        std::string op;     // "=", "+=", "-=", ...
+        std::string op;
         ExprPtr target;
         ExprPtr value;
         AssignExpr() : Expr(ExprKind::Assign) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Call ───────────────────────────────────────────────
     struct CallExpr : Expr {
         ExprPtr callee;
         std::vector<ExprPtr> args;
@@ -190,7 +148,6 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Field ──────────────────────────────────────────────
     struct FieldExpr : Expr {
         ExprPtr object;
         std::string field;
@@ -198,7 +155,6 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Index ──────────────────────────────────────────────
     struct IndexExpr : Expr {
         ExprPtr object;
         ExprPtr index;
@@ -206,21 +162,18 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Group ──────────────────────────────────────────────
     struct GroupExpr : Expr {
         ExprPtr inner;
         GroupExpr() : Expr(ExprKind::Group) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── ArrayLit ───────────────────────────────────────────
     struct ArrayLitExpr : Expr {
         std::vector<ExprPtr> elements;
         ArrayLitExpr() : Expr(ExprKind::ArrayLit) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── StructLit ──────────────────────────────────────────
     struct StructLitField {
         std::string name;
         ExprPtr value;
@@ -233,7 +186,6 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Path (foo::bar::baz) ───────────────────────────────
     struct PathExpr : Expr {
         std::vector<std::string> segments;
         PathExpr() : Expr(ExprKind::Path) {}
@@ -241,19 +193,11 @@ namespace mayami {
     };
 
     // ============================================================
-    // Stmt — инструкции
+    // Stmt
     // ============================================================
     enum class StmtKind {
-        Let,
-        ExprStmt,
-        Block,
-        If,
-        While,
-        For,
-        Loop,
-        Return,
-        Break,
-        Continue,
+        Let, ExprStmt, Block, If, While, For, Loop,
+        Return, Break, Continue,
     };
 
     struct Stmt {
@@ -267,41 +211,36 @@ namespace mayami {
         virtual std::string toString(int indent = 0) const = 0;
     };
 
-    // ─── Let ────────────────────────────────────────────────
     struct LetStmt : Stmt {
         std::string name;
         bool isMut = false;
-        TypePtr declaredType;   // может быть null (вывод)
-        ExprPtr init;           // может быть null
+        TypePtr declaredType;
+        ExprPtr init;
 
         LetStmt() : Stmt(StmtKind::Let) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── ExprStmt ───────────────────────────────────────────
     struct ExprStmt : Stmt {
         ExprPtr expr;
         ExprStmt() : Stmt(StmtKind::ExprStmt) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Block ──────────────────────────────────────────────
     struct BlockStmt : Stmt {
         std::vector<StmtPtr> statements;
         BlockStmt() : Stmt(StmtKind::Block) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── If ─────────────────────────────────────────────────
     struct IfStmt : Stmt {
         ExprPtr condition;
         StmtPtr thenBranch;
-        StmtPtr elseBranch;     // может быть null, или IfStmt, или Block
+        StmtPtr elseBranch;
         IfStmt() : Stmt(StmtKind::If) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── While ──────────────────────────────────────────────
     struct WhileStmt : Stmt {
         ExprPtr condition;
         StmtPtr body;
@@ -309,7 +248,6 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── For ────────────────────────────────────────────────
     struct ForStmt : Stmt {
         std::string varName;
         ExprPtr iterable;
@@ -318,34 +256,30 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Loop ───────────────────────────────────────────────
     struct LoopStmt : Stmt {
         StmtPtr body;
         LoopStmt() : Stmt(StmtKind::Loop) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Return ─────────────────────────────────────────────
     struct ReturnStmt : Stmt {
-        ExprPtr value;      // может быть null
+        ExprPtr value;
         ReturnStmt() : Stmt(StmtKind::Return) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Break ──────────────────────────────────────────────
     struct BreakStmt : Stmt {
         BreakStmt() : Stmt(StmtKind::Break) {}
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Continue ───────────────────────────────────────────
     struct ContinueStmt : Stmt {
         ContinueStmt() : Stmt(StmtKind::Continue) {}
         std::string toString(int indent = 0) const override;
     };
 
     // ============================================================
-    // Decl — объявления
+    // Decl
     // ============================================================
     enum class DeclKind {
         Function,
@@ -353,6 +287,7 @@ namespace mayami {
         Enum,
         Impl,
         Use,
+        Import,   // ★
     };
 
     struct Decl {
@@ -366,13 +301,11 @@ namespace mayami {
         virtual std::string toString(int indent = 0) const = 0;
     };
 
-    // ─── Param ──────────────────────────────────────────────
     struct Param {
         std::string name;
         TypePtr type;
     };
 
-    // ─── Function ───────────────────────────────────────────
     struct FunctionDecl : Decl {
         std::string name;
         std::vector<Param> params;
@@ -383,13 +316,11 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Struct field ───────────────────────────────────────
     struct StructField {
         std::string name;
         TypePtr type;
     };
 
-    // ─── Struct ─────────────────────────────────────────────
     struct StructDecl : Decl {
         std::string name;
         std::vector<StructField> fields;
@@ -398,13 +329,11 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Enum variant ───────────────────────────────────────
     struct EnumVariant {
         std::string name;
-        std::vector<TypePtr> payload;   // пусто = unit variant
+        std::vector<TypePtr> payload;
     };
 
-    // ─── Enum ───────────────────────────────────────────────
     struct EnumDecl : Decl {
         std::string name;
         std::vector<EnumVariant> variants;
@@ -413,7 +342,6 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Impl ───────────────────────────────────────────────
     struct ImplDecl : Decl {
         std::string typeName;
         std::vector<std::unique_ptr<FunctionDecl>> methods;
@@ -422,7 +350,6 @@ namespace mayami {
         std::string toString(int indent = 0) const override;
     };
 
-    // ─── Use ────────────────────────────────────────────────
     struct UseDecl : Decl {
         std::vector<std::string> path;
         UseDecl() : Decl(DeclKind::Use) {}
@@ -430,7 +357,17 @@ namespace mayami {
     };
 
     // ============================================================
-    // Program — корень дерева
+    // ★ ImportDecl — import "file.mayami";
+    // ============================================================
+    struct ImportDecl : Decl {
+        std::string path;   // "math_lib.mayami" или "lib/helpers.mayami"
+
+        ImportDecl() : Decl(DeclKind::Import) {}
+        std::string toString(int indent = 0) const override;
+    };
+
+    // ============================================================
+    // Program
     // ============================================================
     struct Program {
         std::vector<DeclPtr> declarations;

@@ -7,10 +7,10 @@
 namespace mayami {
 
     // ============================================================
-    // ★ Таблица ключевых слов (полные + короткие алиасы)
+    // Таблица ключевых слов
     // ============================================================
     static const std::unordered_map<std::string, TokenType> KEYWORDS = {
-        // ─── Полные ключевые слова ──────────────────────────
+        // ─── Ключевые слова ─────────────────────────────────
         { "fn",       TokenType::KwFn },
         { "let",      TokenType::KwLet },
         { "mut",      TokenType::KwMut },
@@ -31,6 +31,7 @@ namespace mayami {
         { "await",    TokenType::KwAwait },
         { "pub",      TokenType::KwPub },
         { "use",      TokenType::KwUse },
+        { "import",   TokenType::KwImport },   // ★
         { "mod",      TokenType::KwMod },
         { "const",    TokenType::KwConst },
         { "static",   TokenType::KwStatic },
@@ -40,37 +41,36 @@ namespace mayami {
         { "Self",     TokenType::KwSelfType },
         { "where",    TokenType::KwWhere },
 
-        // Типы (полные)
+        // ─── Типы (для аннотаций let x: i32 = 5) ────────────
         { "i8",   TokenType::KwI8},   { "i16",  TokenType::KwI16},
         { "i32",  TokenType::KwI32},  { "i64",  TokenType::KwI64},
         { "u8",   TokenType::KwU8},   { "u16",  TokenType::KwU16},
         { "u32",  TokenType::KwU32},  { "u64",  TokenType::KwU64},
         { "f32",  TokenType::KwF32},  { "f64",  TokenType::KwF64},
-        { "bool", TokenType::KwBool}, { "string", TokenType::KwString},
-        { "char", TokenType::KwChar}, { "void", TokenType::KwVoid},
+        { "void", TokenType::KwVoid},
 
-        // Литералы
+        // ─── Литералы ───────────────────────────────────────
         { "true",  TokenType::True},
         { "false", TokenType::False},
 
-        // ─── ★ СУПЕР-КОРОТКИЕ АЛИАСЫ ───────────────────────
-        { "f",   TokenType::KwFn },         // fn
-        { "l",   TokenType::KwLet },        // let
-        { "m",   TokenType::KwMut },        // mut
-        { "el",  TokenType::KwElse },       // else
-        { "wh",  TokenType::KwWhile },      // while
-        { "fr",  TokenType::KwFor },        // for
-        { "lp",  TokenType::KwLoop },       // loop
-        { "br",  TokenType::KwBreak },      // break
-        { "cn",  TokenType::KwContinue },   // continue
-        { "r",   TokenType::KwReturn },     // return
-        { "st",  TokenType::KwStruct },     // struct
-        { "en",  TokenType::KwEnum },       // enum
-        { "tr",  TokenType::KwTrait },      // trait
-        { "im",  TokenType::KwImpl },       // impl
-        { "mt",  TokenType::KwMatch },      // match
-        { "t",   TokenType::True },         // true
-        { "F",   TokenType::False },        // false
+        // ─── Короткие алиасы ────────────────────────────────
+        { "f",   TokenType::KwFn },
+        { "l",   TokenType::KwLet },
+        { "m",   TokenType::KwMut },
+        { "el",  TokenType::KwElse },
+        { "wh",  TokenType::KwWhile },
+        { "fr",  TokenType::KwFor },
+        { "lp",  TokenType::KwLoop },
+        { "br",  TokenType::KwBreak },
+        { "cn",  TokenType::KwContinue },
+        { "r",   TokenType::KwReturn },
+        { "st",  TokenType::KwStruct },
+        { "en",  TokenType::KwEnum },
+        { "tr",  TokenType::KwTrait },
+        { "im",  TokenType::KwImpl },
+        { "mt",  TokenType::KwMatch },
+        { "t",   TokenType::True },
+        { "F",   TokenType::False },
     };
 
     // ============================================================
@@ -107,6 +107,7 @@ namespace mayami {
         case TokenType::KwAwait:     return "KW_AWAIT";
         case TokenType::KwPub:       return "KW_PUB";
         case TokenType::KwUse:       return "KW_USE";
+        case TokenType::KwImport:    return "KW_IMPORT";   // ★
         case TokenType::KwMod:       return "KW_MOD";
         case TokenType::KwConst:     return "KW_CONST";
         case TokenType::KwStatic:    return "KW_STATIC";

@@ -40,7 +40,6 @@ static bool writeBinary(const std::string& path,
     return (bool)f;
 }
 
-// Убрать \r и \n из конца строки
 static std::string trimEol(std::string s) {
     while (!s.empty() && (s.back() == '\n' || s.back() == '\r' ||
         s.back() == ' ' || s.back() == '\t'))
@@ -48,7 +47,6 @@ static std::string trimEol(std::string s) {
     return s;
 }
 
-// Папка, где лежит текущий exe
 static std::string getSelfDir(const char* argv0) {
 #ifdef _WIN32
     char buf[MAX_PATH];
@@ -66,14 +64,12 @@ static std::string getSelfDir(const char* argv0) {
     return ".";
 }
 
-// Проверить что файл существует и это обычный файл
 static bool fileExists(const std::string& path) {
     DWORD attrs = GetFileAttributesA(path.c_str());
     return (attrs != INVALID_FILE_ATTRIBUTES &&
         !(attrs & FILE_ATTRIBUTE_DIRECTORY));
 }
 
-// Создать папку (рекурсивно, через cmd md — работает надёжно)
 static bool makeDirRecursive(const std::string& dir) {
     if (dir.empty()) return true;
     DWORD attrs = GetFileAttributesA(dir.c_str());
@@ -81,7 +77,6 @@ static bool makeDirRecursive(const std::string& dir) {
         (attrs & FILE_ATTRIBUTE_DIRECTORY))
         return true;
 
-    // Создаём через cmd — рекурсивно, надёжно
     std::string cmd = "cmd /c md \"" + dir + "\" >nul 2>nul";
     int rc = std::system(cmd.c_str());
     if (rc != 0) return false;
@@ -91,14 +86,12 @@ static bool makeDirRecursive(const std::string& dir) {
         (attrs & FILE_ATTRIBUTE_DIRECTORY));
 }
 
-// Взять родительскую папку из пути к файлу
 static std::string parentDir(const std::string& filePath) {
     size_t pos = filePath.find_last_of("\\/");
     if (pos == std::string::npos) return "";
     return filePath.substr(0, pos);
 }
 
-// Найти mayamivm.exe рядом с mayamic.exe
 static std::string findVMExe(const char* argv0) {
     std::string dir = getSelfDir(argv0);
 
@@ -111,7 +104,6 @@ static std::string findVMExe(const char* argv0) {
 
     for (auto& p : candidates) {
         if (fileExists(p)) {
-            // Абсолютный путь
             char full[MAX_PATH];
             DWORD n = GetFullPathNameA(p.c_str(), MAX_PATH, full, nullptr);
             if (n > 0 && n < MAX_PATH) return std::string(full, n);
@@ -146,7 +138,6 @@ int main(int argc, char** argv) {
         }
     }
 
-    // ★ Убираем кавычки из путей, если они есть
     auto unquote = [](std::string s) {
         if (s.size() >= 2 && s.front() == '"' && s.back() == '"')
             return s.substr(1, s.size() - 2);
@@ -157,7 +148,6 @@ int main(int argc, char** argv) {
 
     // ─── Имя по умолчанию ──────────────────────────────
     if (outPath.empty()) {
-        // baseName = имя файла без папки и без .mayami
         std::string base = inPath;
         size_t slash = base.find_last_of("\\/");
         if (slash != std::string::npos) base = base.substr(slash + 1);
@@ -167,7 +157,6 @@ int main(int argc, char** argv) {
         outPath = "build/" + base + (mycOnly ? ".myc" : ".exe");
     }
 
-    // Нормализуем разделители: `/` → `\`
     for (auto& c : outPath) if (c == '/') c = '\\';
     for (auto& c : inPath)  if (c == '/') c = '\\';
 
@@ -209,6 +198,17 @@ int main(int argc, char** argv) {
 
     // ─── BytecodeGen ────────────────────────────────────
     BytecodeGen gen;
+
+    // ★ Папка исходного файла — для поиска import
+    {
+        size_t pos = inPath.find_last_of("\\/");
+        std::string dir = (pos != std::string::npos)
+            ? inPath.substr(0, pos)
+            : ".";
+        gen.setSourceDir(dir);
+        std::cout << "[INFO] Source dir: " << dir << "\n";
+    }
+
     std::vector<uint8_t> bytecode = gen.generate(program.get());
     if (gen.hasErrors()) {
         std::cerr << "Ошибки генерации байткода:\n";
@@ -238,7 +238,6 @@ int main(int argc, char** argv) {
 
     std::cout << "[INFO] VM: " << vmExe << "\n";
 
-    // Копируем через WinAPI (copy)
     {
         std::string cmd = "cmd /c copy /Y \"" + vmExe + "\" \"" + outPath + "\" >nul 2>nul";
         int rc = std::system(cmd.c_str());
@@ -249,13 +248,11 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Дописываем байткод + трейлер
     if (!appendBytecodeToExe(outPath, bytecode)) {
         std::cerr << "Ошибка: не могу дописать байткод в '" << outPath << "'\n";
         return 1;
     }
 
-    // Итоговый размер
     long sz = 0;
     {
         std::ifstream f(outPath, std::ios::binary | std::ios::ate);

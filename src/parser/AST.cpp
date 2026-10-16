@@ -306,6 +306,13 @@ namespace mayami {
     }
 
     // ============================================================
+    // ★ ImportDecl — toString
+    // ============================================================
+    std::string ImportDecl::toString(int indent) const {
+        return indentStr(indent) + "Import(\"" + path + "\")";
+    }
+
+    // ============================================================
     // Program
     // ============================================================
     std::string Program::toString() const {

@@ -48,7 +48,8 @@ namespace mayami {
             case TokenType::KwFn: case TokenType::KwLet: case TokenType::KwIf:
             case TokenType::KwWhile: case TokenType::KwFor: case TokenType::KwLoop:
             case TokenType::KwReturn: case TokenType::KwStruct: case TokenType::KwEnum:
-            case TokenType::KwImpl: case TokenType::KwUse: case TokenType::RBrace:
+            case TokenType::KwImpl: case TokenType::KwUse: case TokenType::KwImport:
+            case TokenType::RBrace:
                 return;
             default: break;
             }
@@ -181,6 +182,7 @@ namespace mayami {
         return program;
     }
 
+    // ★ FIX: добавлен KwImport
     DeclPtr Parser::parseDeclaration() {
         bool isPub = match(TokenType::KwPub);
         if (check(TokenType::KwFn))     return parseFunctionDecl(isPub);
@@ -188,7 +190,8 @@ namespace mayami {
         if (check(TokenType::KwEnum))   return parseEnumDecl(isPub);
         if (check(TokenType::KwImpl))   return parseImplDecl();
         if (check(TokenType::KwUse))    return parseUseDecl();
-        error("Expected declaration (fn, struct, enum, impl, use)");
+        if (check(TokenType::KwImport)) return parseImportDecl();   // ★
+        error("Expected declaration (fn, struct, enum, impl, use, import)");
         synchronize();
         return nullptr;
     }
@@ -318,11 +321,28 @@ namespace mayami {
         return use;
     }
 
+    // ★ NEW: import "file.mayami";
+    DeclPtr Parser::parseImportDecl() {
+        auto imp = std::make_unique<ImportDecl>();
+        imp->line = peek().line;
+        imp->column = peek().column;
+
+        expect(TokenType::KwImport, "'import'");
+
+        // Ждём строку: import "file.mayami";
+        const Token& tok = expect(TokenType::String, "file path");
+        imp->path = tok.lexeme;
+
+        match(TokenType::Semi);   // ; опционально
+
+        return imp;
+    }
+
     // ─── Statements ────────────────────────────────────────
     StmtPtr Parser::parseStatement() {
         if (check(TokenType::KwLet))      return parseLetStatement();
         if (check(TokenType::KwIf))       return parseIfStatement();
-        if (check(TokenType::Question))   return parseIfStatement();  // ★ ? = if
+        if (check(TokenType::Question))   return parseIfStatement();
         if (check(TokenType::KwWhile))    return parseWhileStatement();
         if (check(TokenType::KwFor))      return parseForStatement();
         if (check(TokenType::KwLoop))     return parseLoopStatement();
@@ -354,7 +374,6 @@ namespace mayami {
         auto stmt = std::make_unique<IfStmt>();
         stmt->line = peek().line;
 
-        // ★ if или ?
         bool isQuestion = false;
         if (match(TokenType::KwIf)) {
             isQuestion = false;
@@ -374,7 +393,6 @@ namespace mayami {
             synchronize();
         }
 
-        // ★ else или : (для ? синтаксиса)
         if (match(TokenType::KwElse)) {
             if (check(TokenType::KwIf)) {
                 stmt->elseBranch = parseIfStatement();
@@ -387,7 +405,6 @@ namespace mayami {
             }
         }
         else if (isQuestion && match(TokenType::Colon)) {
-            // ★ : как else (только для ?)
             if (check(TokenType::KwIf) || check(TokenType::Question)) {
                 stmt->elseBranch = parseIfStatement();
             }

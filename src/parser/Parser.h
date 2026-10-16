@@ -33,6 +33,7 @@ namespace mayami {
         DeclPtr parseEnumDecl(bool pub = false);
         DeclPtr parseImplDecl();
         DeclPtr parseUseDecl();
+        DeclPtr parseImportDecl();   // ★
 
         bool isTopLevelStatement() const;
 

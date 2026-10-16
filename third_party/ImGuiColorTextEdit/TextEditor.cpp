@@ -8258,6 +8258,9 @@ TextEditor::DocPos TextEditor::TypeSetter::visPos2DocPos(const Document& documen
 	}
 
 	const auto& row = at(pos.row);
+	if (row.line >= document.size()) {
+		return DocPos(document.size() > 0 ? document.size() - 1 : 0, 0);
+	}
 	const auto& line = document[row.line];
 
 	DocPos docPos;

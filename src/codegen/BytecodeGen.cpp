@@ -1,8 +1,15 @@
 // src/codegen/BytecodeGen.cpp
 #include "BytecodeGen.h"
+
+#include "../lexer/Lexer.h"
+#include "../parser/Parser.h"
+
 #include <cstring>
 #include <cstdio>
 #include <sstream>
+#include <fstream>
+#include <unordered_map>
+#include <set>
 
 namespace mayami {
 
@@ -80,6 +87,83 @@ namespace mayami {
         auto it = m_vars.find(name);
         if (it == m_vars.end()) return -1;
         return (int)it->second;
+    }
+
+    // ============================================================
+    // ★ loadImport — рекурсивная загрузка импортов
+    // ============================================================
+    void BytecodeGen::loadImport(const std::string& path, Program* program) {
+        // Определяем полный путь
+        std::string fullPath = path;
+        bool isAbs = (path.size() >= 2 && path[1] == ':') ||
+            (!path.empty() && (path[0] == '/' || path[0] == '\\'));
+
+        if (!isAbs && !m_sourceDir.empty()) {
+            fullPath = m_sourceDir + "\\" + path;
+        }
+
+        // Защита от дубликатов / циклов
+        if (m_importedFiles.count(fullPath)) return;
+        m_importedFiles.insert(fullPath);
+
+        // Читаем файл
+        std::ifstream f(fullPath, std::ios::binary);
+        if (!f) {
+            error("Cannot open import: " + fullPath);
+            return;
+        }
+        std::stringstream ss;
+        ss << f.rdbuf();
+        std::string source = ss.str();
+
+        // Лексер
+        Lexer lexer(source);
+        auto tokens = lexer.tokenize();
+        if (lexer.hasErrors()) {
+            for (auto& e : lexer.errors()) error("[" + path + "] " + e);
+            return;
+        }
+
+        // Парсер
+        Parser parser(tokens);
+        auto importedProgram = parser.parse();
+        if (!importedProgram || parser.hasErrors()) {
+            for (auto& e : parser.errors()) error("[" + path + "] " + e);
+            return;
+        }
+
+        // ★ Рекурсивно обрабатываем импорты внутри этого файла
+        for (auto& decl : importedProgram->declarations) {
+            if (decl->kind == DeclKind::Import) {
+                auto imp = static_cast<ImportDecl*>(decl.get());
+                loadImport(imp->path, program);
+            }
+        }
+
+        // ★ Добавляем функции и структуры в основную программу
+        for (auto& decl : importedProgram->declarations) {
+            if (decl->kind == DeclKind::Function) {
+                auto fn = static_cast<FunctionDecl*>(decl.get());
+
+                // Не добавляем main из импорта
+                if (fn->name == "main") continue;
+
+                // Проверка: нет ли уже такой функции
+                bool exists = false;
+                for (auto& d : program->declarations) {
+                    if (d->kind == DeclKind::Function) {
+                        auto existing = static_cast<FunctionDecl*>(d.get());
+                        if (existing->name == fn->name) { exists = true; break; }
+                    }
+                }
+                if (!exists) {
+                    program->declarations.push_back(std::move(decl));
+                }
+            }
+            else if (decl->kind == DeclKind::Struct) {
+                program->declarations.push_back(std::move(decl));
+            }
+        }
     }
 
     // ============================================================
@@ -453,6 +537,7 @@ namespace mayami {
 
         if (e->op == "=") {
             genExpr(e->value.get());
+            emit(OpCode::DUP);
             emit(OpCode::STORE_VAR);
             emitU32((uint32_t)slot);
         }
@@ -469,13 +554,14 @@ namespace mayami {
             else if (binOp == "%") emit(OpCode::MOD);
             else error("Unknown assign op: " + e->op);
 
+            emit(OpCode::DUP);
             emit(OpCode::STORE_VAR);
             emitU32((uint32_t)slot);
         }
     }
 
     // ============================================================
-    // ВЫЗОВ ФУНКЦИЙ — главная таблица native
+    // ВЫЗОВ ФУНКЦИЙ
     // ============================================================
     void BytecodeGen::genCall(CallExpr* e) {
         // obj.method(...)
@@ -489,15 +575,27 @@ namespace mayami {
             }
 
             static const std::unordered_map<std::string, uint32_t> methodIds = {
-                { "len",        NATIVE_STR_LEN },
-                { "length",     NATIVE_STR_LEN },
-                { "upper",      NATIVE_STR_UPPER },
-                { "lower",      NATIVE_STR_LOWER },
-                { "substr",     NATIVE_STR_SUBSTR },
-                { "substring",  NATIVE_STR_SUBSTR },
-                { "find",       NATIVE_STR_FIND },
-                { "contains",   NATIVE_STR_CONTAINS },
-                { "replace",    NATIVE_STR_REPLACE },
+                { "len",          NATIVE_STR_LEN },
+                { "length",       NATIVE_STR_LEN },
+                { "upper",        NATIVE_STR_UPPER },
+                { "lower",        NATIVE_STR_LOWER },
+                { "substr",       NATIVE_STR_SUBSTR },
+                { "substring",    NATIVE_STR_SUBSTR },
+                { "find",         NATIVE_STR_FIND },
+                { "contains",     NATIVE_STR_CONTAINS },
+                { "replace",      NATIVE_STR_REPLACE },
+                { "trim",         NATIVE_STR_TRIM },
+                { "starts_with",  NATIVE_STR_STARTS_WITH },
+                { "ends_with",    NATIVE_STR_ENDS_WITH },
+                { "repeat",       NATIVE_STR_REPEAT },
+                { "char_at",      NATIVE_STR_CHAR_AT },
+                { "reverse",      NATIVE_STR_REVERSE },
+                { "pad_left",     NATIVE_STR_PAD_LEFT },
+                { "pad_right",    NATIVE_STR_PAD_RIGHT },
+                { "index_of",     NATIVE_STR_INDEX_OF },
+                { "split",        NATIVE_STR_SPLIT },
+                { "to_int",       NATIVE_STR_TO_INT },
+                { "to_float",     NATIVE_STR_TO_FLOAT },
             };
 
             auto it = methodIds.find(field->field);
@@ -539,59 +637,83 @@ namespace mayami {
         }
 
         static const std::unordered_map<std::string, uint32_t> nativeIds = {
-            // ─── Вывод ──────────────────────────────────────
             { "p",         NATIVE_PRINTLN },
             { "println",   NATIVE_PRINTLN },
             { "w",         NATIVE_PRINT },
             { "print",     NATIVE_PRINT },
-            { "e",         NATIVE_EPRINT },
             { "eprint",    NATIVE_EPRINT },
 
-            // ─── Математика ─────────────────────────────────
-            { "s",     NATIVE_SQRT },
             { "sqrt",  NATIVE_SQRT },
-            { "a",     NATIVE_ABS },
             { "abs",   NATIVE_ABS },
-            { "si",    NATIVE_SIN },
             { "sin",   NATIVE_SIN },
-            { "co",    NATIVE_COS },
             { "cos",   NATIVE_COS },
-            { "ta",    NATIVE_TAN },
             { "tan",   NATIVE_TAN },
-            { "pw",    NATIVE_POW },
             { "pow",   NATIVE_POW },
-            { "fl",    NATIVE_FLOOR },
             { "floor", NATIVE_FLOOR },
-            { "ce",    NATIVE_CEIL },
             { "ceil",  NATIVE_CEIL },
-            { "ro",    NATIVE_ROUND },
             { "round", NATIVE_ROUND },
-            { "mn",    NATIVE_MIN },
             { "min",   NATIVE_MIN },
-            { "mx",    NATIVE_MAX },
             { "max",   NATIVE_MAX },
 
-            // ─── UI (старые WinAPI) ─────────────────────────
-            { "ui_begin",     NATIVE_UI_BEGIN },
-            { "ui_label",     NATIVE_UI_LABEL },
-            { "ui_button",    NATIVE_UI_BUTTON },
-            { "ui_input",     NATIVE_UI_INPUT },
-            { "ui_checkbox",  NATIVE_UI_CHECKBOX },
-            { "ui_show",      NATIVE_UI_SHOW },
-            { "ui_clicked",   NATIVE_UI_CLICKED },
-            { "ui_get",       NATIVE_UI_GETVAL },
-            { "ui_textbox",   NATIVE_UI_TEXTBOX },
+            { "random",     NATIVE_RANDOM },
+            { "rnd",        NATIVE_RANDOM },
+            { "random_int", NATIVE_RANDOM_INT },
+            { "randint",    NATIVE_RANDOM_INT },
+            { "log",        NATIVE_LOG },
+            { "ln",         NATIVE_LOG },
+            { "log2",       NATIVE_LOG2 },
+            { "log10",      NATIVE_LOG10 },
+            { "lg",         NATIVE_LOG10 },
+            { "exp",        NATIVE_EXP },
+            { "asin",       NATIVE_ASIN },
+            { "acos",       NATIVE_ACOS },
+            { "atan",       NATIVE_ATAN },
+            { "atan2",      NATIVE_ATAN2 },
+            { "sinh",       NATIVE_SINH },
+            { "cosh",       NATIVE_COSH },
+            { "tanh",       NATIVE_TANH },
+            { "clamp",      NATIVE_CLAMP },
+            { "sign",       NATIVE_SIGN },
+            { "hypot",      NATIVE_HYPOT },
+            { "pi",         NATIVE_PI },
+            { "e",          NATIVE_E },
+            { "deg2rad",    NATIVE_DEG2RAD },
+            { "rad2deg",    NATIVE_RAD2DEG },
 
-            // ─── Event loop ─────────────────────────────────
-            { "ui_running",   NATIVE_UI_RUNNING },
-            { "ui_poll",      NATIVE_UI_POLL },
-            { "ui_sleep",     NATIVE_UI_SLEEP },
-            { "ui_set_label", NATIVE_UI_SET_LABEL },
-            { "ui_set_text",  NATIVE_UI_SET_TEXT },
-            { "ui_remove",    NATIVE_UI_REMOVE },
-            { "ui_refresh",   NATIVE_UI_REFRESH },
+            { "to_int",     NATIVE_INT },
+            { "int",        NATIVE_INT },
+            { "to_float",   NATIVE_FLOAT },
+            { "float",      NATIVE_FLOAT },
+            { "to_str",     NATIVE_STR },
+            { "str",        NATIVE_STR },
+            { "to_bool",    NATIVE_BOOL },
+            { "bool",       NATIVE_BOOL },
+            { "chr",        NATIVE_CHAR },
+            { "ord",        NATIVE_ORD },
 
-            // ─── Кастомный UI ───────────────────────────────
+            { "str_at",    NATIVE_STR_AT },
+            { "trim",      NATIVE_TRIM },
+            { "split",     NATIVE_STR_SPLIT },
+            { "join",      NATIVE_STR_JOIN },
+            { "to_upper",  NATIVE_TO_UPPER },
+            { "to_lower",  NATIVE_TO_LOWER },
+
+            { "read_file",   NATIVE_READ_FILE },
+            { "write_file",  NATIVE_WRITE_FILE },
+            { "append_file", NATIVE_APPEND_FILE },
+            { "file_exists", NATIVE_FILE_EXISTS },
+            { "delete_file", NATIVE_DELETE_FILE },
+            { "file_size",   NATIVE_FILE_SIZE },
+
+            { "time",      NATIVE_TIME },
+            { "time_ms",   NATIVE_TIME_MS },
+            { "sleep",     NATIVE_SLEEP_MS },
+            { "sleep_ms",  NATIVE_SLEEP_MS },
+            { "exit",      NATIVE_EXIT },
+            { "env",       NATIVE_ENV },
+            { "system",    NATIVE_SYSTEM },
+
+            { "ui_begin",      NATIVE_UI_BEGIN },
             { "ui_theme",      NATIVE_UI_THEME },
             { "ui_rect",       NATIVE_UI_RECT },
             { "ui_rect_round", NATIVE_UI_RECT_ROUND },
@@ -603,37 +725,11 @@ namespace mayami {
             { "ui_height",     NATIVE_UI_HEIGHT },
             { "ui_mouse_x",    NATIVE_UI_MOUSE_X },
             { "ui_mouse_y",    NATIVE_UI_MOUSE_Y },
-
-            // ─── ★ Преобразования типов (псевдонимы!) ──────
-            { "to_int",     NATIVE_INT },
-            { "to_float",   NATIVE_FLOAT },
-            { "to_str",     NATIVE_STR },
-            { "to_bool",    NATIVE_BOOL },
-            { "chr",        NATIVE_CHAR },
-            { "ord",        NATIVE_ORD },
-
-            // ─── ★ Математика (дополнительно) ───────────────
-            { "random",     NATIVE_RANDOM },
-            { "rnd",        NATIVE_RANDOM },
-            { "random_int", NATIVE_RANDOM_INT },
-            { "randint",    NATIVE_RANDOM_INT },
-            { "log",        NATIVE_LOG },
-            { "ln",         NATIVE_LOG },
-            { "exp",        NATIVE_EXP },
-            { "atan2",      NATIVE_ATAN2 },
-
-            // ─── ★ Строки (глобальные) ──────────────────────
-            { "str_at",    NATIVE_STR_AT },
-            { "trim",      NATIVE_TRIM },
-            { "split",     NATIVE_SPLIT_JOIN },
-            { "to_upper",  NATIVE_TO_UPPER },
-            { "to_lower",  NATIVE_TO_LOWER },
-
-            // ─── ★ Время ────────────────────────────────────
-            { "time_ms",   NATIVE_TIME_MS },
-            { "time",      NATIVE_TIME_MS },
-            { "sleep_ms",  NATIVE_SLEEP_MS },
-            { "sleep",     NATIVE_SLEEP_MS },
+            { "ui_running",    NATIVE_UI_RUNNING },
+            { "ui_poll",       NATIVE_UI_POLL },
+            { "ui_sleep",      NATIVE_UI_SLEEP },
+            { "ui_refresh",    NATIVE_UI_REFRESH },
+            { "ui_show",       NATIVE_UI_SHOW },
         };
 
         auto it = nativeIds.find(id->name);
@@ -687,6 +783,16 @@ namespace mayami {
     // ============================================================
     std::vector<uint8_t> BytecodeGen::generate(Program* program) {
         if (!program) return {};
+
+        // ★ Обрабатываем импорты ПЕРЕД сбором функций
+        size_t initialSize = program->declarations.size();
+        for (size_t i = 0; i < initialSize; ++i) {
+            auto& decl = program->declarations[i];
+            if (decl && decl->kind == DeclKind::Import) {
+                auto imp = static_cast<ImportDecl*>(decl.get());
+                loadImport(imp->path, program);
+            }
+        }
 
         collectFunctions(program);
 

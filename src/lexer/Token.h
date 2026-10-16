@@ -21,6 +21,9 @@ namespace mayami {
         KwImpl, KwMatch, KwAsync, KwAwait, KwPub, KwUse, KwMod,
         KwConst, KwStatic, KwIn, KwAs, KwSelf, KwSelfType, KwWhere,
 
+        // ★ Импорты
+        KwImport,
+
         // Типы
         KwI8, KwI16, KwI32, KwI64,
         KwU8, KwU16, KwU32, KwU64,
