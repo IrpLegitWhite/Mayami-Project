@@ -1,9 +1,14 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(mayami LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Принудительно используем MSVC и Windows SDK
+if(MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17 /EHsc")
+endif()
 
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
@@ -13,13 +18,16 @@ endif()
 # ПУТИ
 # ============================================================
 set(SRC_DIR      "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set(INC_DIR      "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(LIBS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/libs")
 set(TP_DIR       "${CMAKE_CURRENT_SOURCE_DIR}/third_party")
 set(IMGUI_DIR    "${TP_DIR}/imgui")
 set(TEXTEDIT_DIR "${TP_DIR}/ImGuiColorTextEdit")
 set(BIN_DIR      "${CMAKE_CURRENT_SOURCE_DIR}/bin")
+set(LIBS_BIN_DIR "${BIN_DIR}/libs")
 
 # ============================================================
-# ОБЩЕЕ ЯДРО
+# ОБЩЕЕ ЯДРО (собирается в DLL)
 # ============================================================
 set(CORE_SOURCES
     "${SRC_DIR}/lexer/Lexer.cpp"
@@ -28,6 +36,8 @@ set(CORE_SOURCES
     "${SRC_DIR}/codegen/BytecodeGen.cpp"
     "${SRC_DIR}/vm/VM.cpp"
 )
+
+set(SDK_HEADER "${INC_DIR}/mayami/mayami_sdk.h")
 
 # ============================================================
 # IMGUI
@@ -56,21 +66,52 @@ set(MAYAMI_LIBS
 )
 
 # ============================================================
-# 1) mayamivm.exe — VM (ОКОННОЕ приложение)
+# ★ 0) mayami_core.dll — ЯДРО (VM + компилятор)
+# ============================================================
+add_library(mayami_core SHARED ${CORE_SOURCES})
+target_include_directories(mayami_core PRIVATE
+    "${SRC_DIR}"
+    "${INC_DIR}"
+    "${INC_DIR}/mayami"
+)
+
+if(MSVC)
+    target_compile_options(mayami_core PRIVATE /W3 /utf-8)
+    target_compile_definitions(mayami_core PRIVATE ${MAYAMI_DEFS} MAYAMI_CORE_EXPORTS)
+else()
+    target_compile_options(mayami_core PRIVATE -Wall -Wextra)
+    target_compile_definitions(mayami_core PRIVATE MAYAMI_CORE_EXPORTS)
+endif()
+
+set_target_properties(mayami_core PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${BIN_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY "${BIN_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${BIN_DIR}"
+    ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${BIN_DIR}"
+)
+
+# ============================================================
+# 1) mayamivm.exe — VM
 # ============================================================
 add_executable(mayamivm
     "${SRC_DIR}/main_vm.cpp"
-    "${SRC_DIR}/vm/VM.cpp"
+    ${SDK_HEADER}
+    "src/vm/DllManager.h"
 )
 
 target_include_directories(mayamivm PRIVATE
     "${SRC_DIR}"
+    "${INC_DIR}"
+    "${INC_DIR}/mayami"
 )
+
+target_link_libraries(mayamivm PRIVATE mayami_core)
 
 if(MSVC)
     target_compile_options(mayamivm PRIVATE /W3 /utf-8)
     target_compile_definitions(mayamivm PRIVATE ${MAYAMI_DEFS})
-    # ★ Оконное приложение, но точка входа main (не WinMain)
     target_link_options(mayamivm PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
 else()
     target_compile_options(mayamivm PRIVATE -Wall -Wextra)
@@ -78,6 +119,8 @@ endif()
 
 set_target_properties(mayamivm PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${BIN_DIR}"
 )
 
 # ============================================================
@@ -85,12 +128,17 @@ set_target_properties(mayamivm PROPERTIES
 # ============================================================
 add_executable(mayamic
     "${SRC_DIR}/main_compiler.cpp"
-    ${CORE_SOURCES}
+    ${SDK_HEADER}
+    "src/vm/DllManager.h"
 )
 
 target_include_directories(mayamic PRIVATE
     "${SRC_DIR}"
+    "${INC_DIR}"
+    "${INC_DIR}/mayami"
 )
+
+target_link_libraries(mayamic PRIVATE mayami_core)
 
 if(MSVC)
     target_compile_options(mayamic PRIVATE /W3 /utf-8)
@@ -101,6 +149,8 @@ endif()
 
 set_target_properties(mayamic PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${BIN_DIR}"
 )
 
 # ============================================================
@@ -110,18 +160,22 @@ add_executable(mayami
     "${SRC_DIR}/main.cpp"
     "${SRC_DIR}/App.cpp"
     "${SRC_DIR}/core/FileSystem.cpp"
-    ${CORE_SOURCES}
     ${IMGUI_SOURCES}
+    ${SDK_HEADER}
+    "src/vm/DllManager.h"
 )
 
 target_include_directories(mayami PRIVATE
     "${SRC_DIR}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+    "${INC_DIR}"
+    "${INC_DIR}/mayami"
     "${TP_DIR}"
     "${IMGUI_DIR}"
     "${IMGUI_DIR}/backends"
     "${TEXTEDIT_DIR}"
 )
+
+target_link_libraries(mayami PRIVATE mayami_core)
 
 if(MSVC)
     target_compile_options(mayami PRIVATE /W3 /utf-8 /wd5220 /wd4239)
@@ -137,4 +191,59 @@ endif()
 
 set_target_properties(mayami PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${BIN_DIR}"
+)
+
+# ============================================================
+# 4) Стандартные DLL-библиотеки (собираются в bin/libs/)
+# ============================================================
+add_library(fs SHARED
+    "${LIBS_SRC_DIR}/fs/fs.cpp"
+    ${SDK_HEADER}
+    "src/vm/DllManager.h"
+)
+
+target_include_directories(fs PRIVATE
+    "${INC_DIR}"
+    "${INC_DIR}/mayami"
+)
+
+if(MSVC)
+    target_compile_options(fs PRIVATE /W3 /utf-8)
+    target_compile_definitions(fs PRIVATE ${MAYAMI_DEFS})
+else()
+    target_compile_options(fs PRIVATE -Wall -Wextra)
+endif()
+
+set_target_properties(fs PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${LIBS_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${LIBS_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${LIBS_BIN_DIR}"
+)
+
+# ============================================================
+# 5) std.dll — математика, строки, HTML, сеть
+# ============================================================
+add_library(std SHARED
+    "${LIBS_SRC_DIR}/std/std.cpp"
+)
+
+target_include_directories(std PRIVATE
+    "${INC_DIR}"
+    "${INC_DIR}/mayami"
+)
+
+if(MSVC)
+    target_compile_options(std PRIVATE /W3 /utf-8)
+    target_compile_definitions(std PRIVATE ${MAYAMI_DEFS})
+    target_link_libraries(std PRIVATE winhttp)
+else()
+    target_compile_options(std PRIVATE -Wall -Wextra)
+endif()
+
+set_target_properties(std PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${LIBS_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${LIBS_BIN_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${LIBS_BIN_DIR}"
 )
